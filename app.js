@@ -33,11 +33,12 @@ function showScene(id){
  player.play().catch(()=>{});
 }
 document.querySelectorAll('[data-scene]').forEach(b=>b.addEventListener('click',()=>showScene(b.dataset.scene)));
-$('#next-scene').addEventListener('click',()=>showScene('S'+String(currentScene%32+1).padStart(2,'0')));
+function nextScene(){showScene('S'+String(currentScene%32+1).padStart(2,'0'));}
+$('#next-scene').addEventListener('click',nextScene);
 document.querySelectorAll('video:not(#hero-video)').forEach(v=>v.addEventListener('play',()=>$('#hero-video')?.pause()));
 
 function setupViewportVideos(){
- const videos=document.querySelectorAll('#hardware video, #applications video');
+ const videos=document.querySelectorAll('#replay-player, #hardware video, #applications video');
  const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
  const states=new Map();
  const pause=(video,state)=>{
@@ -45,7 +46,10 @@ function setupViewportVideos(){
  };
  const sync=(video,state)=>{
   if(!state.visible||document.hidden)pause(video,state);
-  else if(!state.manuallyPaused&&!reducedMotion.matches)video.play().catch(()=>{});
+  else if(!state.manuallyPaused&&!reducedMotion.matches){
+   if(video===player&&video.ended)nextScene();
+   else video.play().catch(()=>{});
+  }
  };
  const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{
   const video=entry.target,state=states.get(video);
@@ -56,12 +60,16 @@ function setupViewportVideos(){
  videos.forEach(video=>{
   const state={visible:false,manuallyPaused:false,automaticPause:false};
   states.set(video,state);
-  video.muted=true;video.defaultMuted=true;video.playsInline=true;video.loop=true;
+  video.muted=true;video.defaultMuted=true;video.playsInline=true;video.loop=video!==player;
   video.addEventListener('pause',()=>{
    if(state.automaticPause)state.automaticPause=false;
-   else if(state.visible&&!document.hidden)state.manuallyPaused=true;
+   else if(state.visible&&!document.hidden&&!video.ended)state.manuallyPaused=true;
   });
-  video.addEventListener('play',()=>{state.manuallyPaused=false;});
+  video.addEventListener('play',()=>{
+   state.manuallyPaused=false;
+   if(!state.visible||document.hidden)pause(video,state);
+  });
+  if(video===player)video.addEventListener('ended',()=>sync(video,state));
   observer.observe(video);
  });
  document.addEventListener('visibilitychange',()=>states.forEach((state,video)=>sync(video,state)));
