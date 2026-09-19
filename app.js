@@ -34,7 +34,42 @@ function showScene(id){
 }
 document.querySelectorAll('[data-scene]').forEach(b=>b.addEventListener('click',()=>showScene(b.dataset.scene)));
 $('#next-scene').addEventListener('click',()=>showScene('S'+String(currentScene%32+1).padStart(2,'0')));
-document.querySelectorAll('video:not(#hero-video)').forEach(v=>v.addEventListener('play',()=>document.querySelectorAll('video').forEach(other=>{if(other!==v)other.pause();})));
+document.querySelectorAll('video:not(#hero-video)').forEach(v=>v.addEventListener('play',()=>$('#hero-video')?.pause()));
+
+function setupViewportVideos(){
+ const videos=document.querySelectorAll('#hardware video, #applications video');
+ const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+ const states=new Map();
+ const pause=(video,state)=>{
+  if(!video.paused){state.automaticPause=true;video.pause();}
+ };
+ const sync=(video,state)=>{
+  if(!state.visible||document.hidden)pause(video,state);
+  else if(!state.manuallyPaused&&!reducedMotion.matches)video.play().catch(()=>{});
+ };
+ const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{
+  const video=entry.target,state=states.get(video);
+  state.visible=entry.isIntersecting&&entry.intersectionRatio>=.2;
+  if(!state.visible)state.manuallyPaused=false;
+  sync(video,state);
+ }),{threshold:[0,.2]});
+ videos.forEach(video=>{
+  const state={visible:false,manuallyPaused:false,automaticPause:false};
+  states.set(video,state);
+  video.muted=true;video.defaultMuted=true;video.playsInline=true;video.loop=true;
+  video.addEventListener('pause',()=>{
+   if(state.automaticPause)state.automaticPause=false;
+   else if(state.visible&&!document.hidden)state.manuallyPaused=true;
+  });
+  video.addEventListener('play',()=>{state.manuallyPaused=false;});
+  observer.observe(video);
+ });
+ document.addEventListener('visibilitychange',()=>states.forEach((state,video)=>sync(video,state)));
+ reducedMotion.addEventListener('change',()=>states.forEach((state,video)=>{
+  if(reducedMotion.matches)pause(video,state);else sync(video,state);
+ }));
+}
+setupViewportVideos();
 
 function setupHeroVideo(){
  const film=document.querySelector('#hero-video'),toggle=document.querySelector('#hero-play-toggle');
